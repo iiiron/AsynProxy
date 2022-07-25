@@ -1,8 +1,6 @@
 package net.noboard.asnyproxy;
 
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 class AsynProxyTest {
@@ -10,10 +8,6 @@ class AsynProxyTest {
         System.out.println("start");
 
         AsynProxy<Wrapper<TestA>, TestA> optionalTestAAsynProxy = AsynProxy.proxyNullable(() -> {
-                    if (true) {
-                        throw new NullPointerException();
-                    }
-
                     try {
                         Thread.sleep(3000);
                     } catch (InterruptedException e) {
@@ -21,7 +15,11 @@ class AsynProxyTest {
                     }
                     return new TestA("wanxm");
                 }, TestA.class)
-                .timeOut(2000L).timeUnit(TimeUnit.MILLISECONDS);
+                .timeOut(2000L)
+                .timeUnit(TimeUnit.MILLISECONDS)
+                .fallbackNullable((e) -> {
+                    return new TestA("wanxm " + e.getClass().getSimpleName());
+                });
 
         Wrapper<TestA> run = optionalTestAAsynProxy.run();
 

@@ -36,7 +36,6 @@ public class AsynProxy<T, Q> implements InvocationHandler, MethodInterceptor {
 
     private Support<T> support;
 
-
     private AsynProxy(Support<T> support, Class<?> clazz) {
         this.clazz = clazz;
         this.support = support;
