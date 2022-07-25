@@ -7,10 +7,7 @@ import net.sf.cglib.proxy.MethodProxy;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 /**
@@ -79,7 +76,7 @@ public class AsynProxy<T, Q> implements InvocationHandler, MethodInterceptor {
         return this;
     }
 
-    public T run() {
+    public <H extends T> H run() {
         String threadName = Thread.currentThread().getName();
 
         this.completableFuture = CompletableFuture.supplyAsync(() -> {
@@ -104,7 +101,7 @@ public class AsynProxy<T, Q> implements InvocationHandler, MethodInterceptor {
             proxy = enhancer.create();
         }
 
-        return (T) proxy;
+        return (H) proxy;
     }
 
     @Override
@@ -137,7 +134,7 @@ public class AsynProxy<T, Q> implements InvocationHandler, MethodInterceptor {
                 if (fallback != null) {
                     result = fallback.get(e);
                 } else {
-                    result = null;
+                    throw e.getCause();
                 }
             } finally {
                 isRun = true;
