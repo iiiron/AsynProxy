@@ -48,3 +48,4 @@ log/
 /rebel.xml
 
 .DS_Store
+dependency-reduced-pom.xml

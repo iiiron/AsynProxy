@@ -2,7 +2,7 @@
 package net.noboard.asnyproxy;
 
 
-import org.springframework.lang.NonNull;
+import jakarta.validation.constraints.NotNull;
 
 @FunctionalInterface
 public interface FallbackSupport<T> {
@@ -12,6 +12,6 @@ public interface FallbackSupport<T> {
      *
      * @return a result
      */
-    @NonNull
+    @NotNull
     T get(Throwable e);
 }
