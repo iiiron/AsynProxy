@@ -5,7 +5,6 @@ import net.sf.cglib.proxy.MethodInterceptor;
 import net.sf.cglib.proxy.MethodProxy;
 
 import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.concurrent.*;
@@ -15,97 +14,111 @@ import java.util.function.Supplier;
  * @author by wanxm
  * @date 2021/8/25 3:02 下午
  */
-public class AsynProxy<T> implements InvocationHandler, MethodInterceptor {
+public class AsynProxy<T, Q> implements InvocationHandler, MethodInterceptor {
 
     private static final Executor defaultExecutor = Executors.newCachedThreadPool();
 
-    private final CompletableFuture<T> completableFuture;
+    private Executor executor;
+
+    private CompletableFuture<T> completableFuture;
 
     private T result = null;
 
     private boolean isRun = false;
 
-    private final Long timeOut;
+    private Long timeOut;
 
-    private final TimeUnit timeUnit;
+    private TimeUnit timeUnit;
 
-    private final Support<T> fallback;
+    private FallbackSupport<T> fallback;
 
-    private AsynProxy(CompletableFuture<T> completableFuture, Long timeOut, TimeUnit timeUnit, Support<T> fallback) {
-        this.completableFuture = completableFuture;
-        this.timeOut = timeOut;
-        this.timeUnit = timeUnit;
-        this.fallback = fallback;
+    private Class<?> clazz;
+
+    private Support<T> support;
+
+    private AsynProxy(Support<T> support, Class<?> clazz) {
+        this.clazz = clazz;
+        this.support = support;
     }
 
-    public static <T> T proxy(Support<T> supplier, Class<?> proxyFace, Executor executor, Long timeOut, TimeUnit timeUnit, Support<T> fallback) {
+    public static <T> AsynProxy<T, T> proxy(Support<T> support, Class<?> clazz) {
+        return new AsynProxy<>(support, clazz);
+    }
+
+    public static <T> AsynProxy<Wrapper<T>, T> proxyNullable(Supplier<T> supplier, Class<?> clazz) {
+        return new AsynProxy<>(() -> Wrapper.ofNullable(supplier.get()), Wrapper.class);
+    }
+
+    public AsynProxy<T, Q> executor(Executor executor) {
+        this.executor = executor;
+        return this;
+    }
+
+    public AsynProxy<T, Q> timeOut(Long timeOut) {
+        this.timeOut = timeOut;
+        return this;
+    }
+
+    public AsynProxy<T, Q> timeUnit(TimeUnit timeUnit) {
+        this.timeUnit = timeUnit;
+        return this;
+    }
+
+    public AsynProxy<T, Q> fallback(FallbackSupport<T> fallback) {
+        this.fallback = fallback;
+        return this;
+    }
+
+
+    public AsynProxy<T, Q> fallbackNullable(FallbackSupport<Q> fallback) {
+        this.fallback = (e) -> (T) Wrapper.ofNullable(fallback.get(e));
+        return this;
+    }
+
+    public <H extends T> H run() {
         String threadName = Thread.currentThread().getName();
 
-        AsynProxy<T> tAsynProxy;
-        tAsynProxy = new AsynProxy<>(CompletableFuture.supplyAsync(() -> {
+        this.completableFuture = CompletableFuture.supplyAsync(() -> {
             String originThreadName = Thread.currentThread().getName();
             Thread.currentThread().setName(threadName);
             try {
-                return supplier.get();
+                return support.get();
             } finally {
                 Thread.currentThread().setName(originThreadName);
             }
-        }, executor == null ? defaultExecutor : executor), timeOut, timeUnit, fallback);
+        }, this.executor == null ? defaultExecutor : executor);
+
 
         Object proxy = null;
-        if (proxyFace.isInterface()) {
-            proxy = Proxy.newProxyInstance(proxyFace.getClassLoader(), new Class[]{proxyFace}, tAsynProxy);
+        if (clazz.isInterface()) {
+            proxy = Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, this);
         } else {
             Enhancer enhancer = new Enhancer();
             enhancer.setUseCache(true);
-            enhancer.setSuperclass(proxyFace);
-            enhancer.setCallback(tAsynProxy);
+            enhancer.setSuperclass(clazz);
+            enhancer.setCallback(this);
             proxy = enhancer.create();
         }
 
-        return (T) proxy;
-    }
-
-    public static <T> T proxy(Support<T> supplier, Class<?> tClass, Executor executor) {
-        return proxy(supplier, tClass, executor, null, null, null);
-    }
-
-    public static <T> T proxy(Support<T> supplier, Class<?> tClass) {
-        return proxy(supplier, tClass, null, null, null, null);
-    }
-
-    public static <T> T proxy(Support<T> supplier, Class<?> tClass, Long timeOut, TimeUnit timeUnit, Support<T> fallback) {
-        return proxy(supplier, tClass, null, timeOut, timeUnit, fallback);
-    }
-
-    public static <T> Wrapper<T> proxyWithWrapper(Supplier<T> supplier, Class<?> tClass, Executor executor, Long timeOut, TimeUnit timeUnit, Supplier<T> fallback) {
-        return proxy(() -> Wrapper.ofNullable(supplier.get()), Wrapper.class, executor, timeOut, timeUnit, () -> Wrapper.ofNullable(fallback.get()));
-    }
-
-    public static <T> Wrapper<T> proxyWithWrapper(Supplier<T> supplier, Class<?> tClass) {
-        return proxyWithWrapper(supplier, tClass, null, null, null, null);
-    }
-
-    public static <T> Wrapper<T> proxyWithWrapper(Supplier<T> supplier, Class<?> tClass, Long timeOut, TimeUnit timeUnit, Supplier<T> fallback) {
-        return proxyWithWrapper(supplier, tClass, null, timeOut, timeUnit, fallback);
-    }
-
-    public static <T> Wrapper<T> proxyWithWrapper(Supplier<T> supplier, Class<?> tClass, Executor executor) {
-        return proxyWithWrapper(supplier, tClass, executor, null, null, null);
+        return (H) proxy;
     }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        try {
-            return method.invoke(getResult(), args);
-        } catch (InvocationTargetException e) {
-            throw e.getCause();
+        T data = getResult();
+        if (data == null) {
+            return null;
         }
+        return method.invoke(data, args);
     }
 
     @Override
     public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) throws Throwable {
-        return methodProxy.invoke(getResult(), objects);
+        T data = getResult();
+        if (data == null) {
+            return null;
+        }
+        return methodProxy.invoke(data, objects);
     }
 
     private synchronized T getResult() throws Throwable {
@@ -116,14 +129,12 @@ public class AsynProxy<T> implements InvocationHandler, MethodInterceptor {
                 } else {
                     result = completableFuture.get();
                 }
-            } catch (TimeoutException e) {
+            } catch (Exception e) {
                 if (fallback != null) {
-                    result = fallback.get();
+                    result = fallback.get(e);
                 } else {
-                    result = null;
+                    throw e.getCause();
                 }
-            } catch (ExecutionException e) {
-                throw e.getCause();
             } finally {
                 isRun = true;
             }

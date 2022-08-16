@@ -5,7 +5,7 @@ package net.noboard.asnyproxy;
 import jakarta.validation.constraints.NotNull;
 
 @FunctionalInterface
-public interface Support<T> {
+public interface FallbackSupport<T> {
 
     /**
      * Gets a result.
@@ -13,5 +13,5 @@ public interface Support<T> {
      * @return a result
      */
     @NotNull
-    T get();
+    T get(Throwable e);
 }

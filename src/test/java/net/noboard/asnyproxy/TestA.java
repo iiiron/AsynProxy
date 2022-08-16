@@ -1,5 +1,6 @@
 package net.noboard.asnyproxy;
 
+
 public class TestA implements Test{
     private String name;
 
@@ -16,5 +17,12 @@ public class TestA implements Test{
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    @Override
+    public String toString() {
+        return "TestA{" +
+                "name='" + name + '\'' +
+                '}';
     }
 }
